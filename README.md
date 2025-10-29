@@ -1,22 +1,24 @@
 # ITSv2: Intelligent Traffic System v2 Documentation
 
-Created by: **Nathan Wanjau, Inc.**
+Created by: **Nathan Wanjau.**
 
 ## Table of Contents
 1.  [Plugin Overview](#1-plugin-overview)
 2.  [Core Components](#2-core-components)
-3.  [Quick Setup Guide](#3-quick-setup-guide)
+3.  [**IMPORTANT: Initial Project Setup**](#3-important-initial-project-setup)
+4.  [Quick Setup Guide](#4-quick-setup-guide)
     *   [Step 1: Setting Up Your Vehicle Pawn](#step-1-setting-up-your-vehicle-pawn)
     *   [Step 2: Creating the Road Network](#step-2-creating-the-road-network)
     *   [Step 3: Setting Up the AI Spawner](#step-3-setting-up-the-ai-spawner)
-4.  [Component Deep Dive](#4-component-deep-dive)
+5.  [Component Deep Dive](#5-component-deep-dive)
     *   [ITSv2 Component](#itsv2-component)
     *   [Vehicle Path Spline Actor](#vehicle-path-spline-actor)
     *   [ITSv2 Spawner Actor](#itsv2-spawner-actor)
     *   [Traffic Light Actor](#traffic-light-actor)
-5.  [Advanced Topics](#5-advanced-topics)
+6.  [Advanced Topics](#6-advanced-topics)
     *   [Creating Custom Vehicle Profiles](#creating-custom-vehicle-profiles)
     *   [How Intersections Work](#how-intersections-work)
+    *   [Debugging Your AI](#debugging-your-ai)
     *   [Behavior Tree Logic](#behavior-tree-logic)
 
 ---
@@ -32,7 +34,7 @@ The system is built around a core `UITSv2Component` that acts as the AI's brain,
     *   **Follow Spline:** Ideal for creating predictable traffic flow, complex racing lines, and parking maneuvers.
     *   **Follow Target:** AI dynamically finds and follows a route to any target Actor in the world using the road network.
 *   **Advanced Obstacle Avoidance:** Uses a configurable array of sensor rays to detect and dynamically maneuver around obstacles.
-*   **intelligent Intersection Handling:** AI vehicles can navigate complex intersections, yielding to traffic based on road priority or right-of-way rules to prevent collisions and deadlocks.
+*   **Intelligent Intersection Handling:** AI vehicles can navigate complex intersections, yielding to traffic based on road priority or right-of-way rules to prevent collisions and deadlocks.
 *   **Dynamic Traffic Spawning:** The `AITSv2_Spawner` automatically manages the vehicle population around the player, spawning and despawning AI to create a lively world without sacrificing performance.
 *   **Racing & Overtaking AI:** Specialized logic for racing scenarios, including drafting, calculating optimal racing lines through corners, and aggressive overtaking. Traffic vehicles can also perform overtakes on two-way roads.
 *   **Vehicle Profiles:** Fine-tune AI driving characteristics, from engine and transmission performance to steering and throttle response, using Data Assets.
@@ -57,7 +59,27 @@ The plugin is composed of several key C++ classes and content assets that work t
 
 ---
 
-## 3. Quick Setup Guide
+## 3. IMPORTANT: Initial Project Setup
+
+Before you begin, you must configure a dedicated Trace Channel for the AI's sensors. **The obstacle avoidance system will not work without this step.**
+
+### Create the VehicleSensor Trace Channel
+
+1.  Go to **Edit -> Project Settings...**
+2.  Under the **Engine** section on the left, click on **Collision**.
+3.  Click the **New Trace Channel...** button.
+4.  A dialog box will appear. Enter the following:
+    *   **Name:** `VehicleSensor`
+    *   **Default Response:** `Block`
+5.  Click **Accept**.
+
+You will now see "VehicleSensor" in your list of Trace Channels. By default, the `ITSv2Component` is configured to use this channel (`ECC_GameTraceChannel12`). This allows the AI's sensors to detect all objects set to "Block" this channel without interfering with other gameplay traces like visibility or camera.
+
+<!-- Placeholder for an image showing the trace channel setup -->
+
+---
+
+## 4. Quick Setup Guide
 
 Follow these steps to get your first AI vehicle driving in minutes.
 
@@ -69,7 +91,7 @@ Follow these steps to get your first AI vehicle driving in minutes.
     *   In the Class Defaults for your vehicle Blueprint, search for the "AI" category.
     *   Set the **`AI Controller Class`** to **`ITSv2_AIController`**. This controller is included in the plugin's content folder.
 
- <!-- Placeholder for an image -->
+<!-- Placeholder for an image of the vehicle pawn setup -->
 
 ### Step 2: Creating the Road Network
 
@@ -105,7 +127,7 @@ The spawner brings your world to life by populating it with AI vehicles.
 
 ---
 
-## 4. Component Deep Dive
+## 5. Component Deep Dive
 
 ### ITSv2 Component
 
@@ -120,7 +142,7 @@ This is the main component containing all the settings that define an AI's behav
     *   `Max Follow Speed Kmh`: The general maximum speed limit for the vehicle in kilometers per hour.
 
 *   **Vehicle Profile**
-    *   This section allows you to define the physical driving characteristics of the vehicle. You can choose a `Default Profile` (like `Slow`, `Standard`, `Fast`) for quick setup, or select `Custom` to use a `Vehicle Profile` Data Asset for maximum control. (See [Advanced Topics](#5-advanced-topics) for more info).
+    *   This section allows you to define the physical driving characteristics of the vehicle. You can choose a `Default Profile` (like `Slow`, `Standard`, `Fast`) for quick setup, or select `Custom` to use a `Vehicle Profile` Data Asset for maximum control. (See [Advanced Topics](#6-advanced-topics) for more info).
 
 *   **Control**
     *   `bFullStop`: An important flag that can be set externally (e.g., by a `TrafficLight` actor) to force the vehicle to a complete stop.
@@ -144,13 +166,13 @@ This is the main component containing all the settings that define an AI's behav
 
 *   **Sensors**
     *   `bUseSensors`: Master toggle for the obstacle avoidance system.
+    *   `SensorTraceChannel`: This is the collision channel the sensors use. It defaults to `ECC_GameTraceChannel12`, which corresponds to the `VehicleSensor` channel you created.
     *   `NumSensorRays`, `SensorSideAngleDeg`, `SensorDistance`: These define the AI's "vision cone". More rays provide more detailed information but have a minor performance cost.
     *   `Front/Rear Sensor Origin`: These FVectors define the local-space starting points for the sensor raycasts. You should position them at the corners of your vehicle for best results. Use the `UpdateSensorVisualization` button to see them in the editor.
     *   `SensorBrakeDistance` / `SensorHardBrakeDistance`: The distances at which the AI will begin to apply the brakes or slam on the brakes, respectively.
 
 *   **Debug**
-    *   `bDrawDebug`: Draws a wealth of real-time debug information, including sensor rays, corner locations, and the current seek point.
-    *   `bVerboseDebug`: Prints state information to the screen for detailed debugging.
+    *   (See [Debugging Your AI](#debugging-your-ai) section below).
 
 ### Vehicle Path Spline Actor
 
@@ -197,7 +219,7 @@ When a configured vehicle enters the trigger, the traffic light will take contro
 
 ---
 
-## 5. Advanced Topics
+## 6. Advanced Topics
 
 ### Creating Custom Vehicle Profiles
 
@@ -225,6 +247,17 @@ The AI uses a multi-step process to navigate intersections safely:
         *   The other vehicle is on a road with a higher `PathPriority`.
         *   Right-of-way rules (e.g., yield to the right if priorities are equal).
 5.  **Proceed:** If all checks pass, it proceeds along the generated curve. If a check fails, it enters a "waiting" state and repeats the checks until the path is clear. To prevent deadlocks, a timer (`IntersectionWaitTimeUntilForce`) will eventually force the AI to proceed if it waits too long.
+
+### Debugging Your AI
+
+Troubleshooting AI can be difficult, so ITSv2 includes several visualization tools. Select an AI vehicle's `ITSv2Component` to access them.
+
+*   **`bDrawDebug`**: The master switch. When enabled, it draws:
+    *   **Sensor Rays:** Green for clear, red for a hit.
+    *   **Vehicle Corners:** Yellow lines showing the defined dimensions of the vehicle.
+    *   **Seek Point:** A green sphere showing where the AI is currently trying to drive.
+    *   **Avoidance Vector:** An orange line showing the path the AI is taking to avoid an obstacle.
+*   **`bVerboseDebug`**: When enabled along with `bDrawDebug`, it prints the AI's current state (e.g., "Driving", "Reversing", "Yielding") as text above the vehicle in the game world.
 
 ### Behavior Tree Logic
 
