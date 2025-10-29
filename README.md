@@ -6,6 +6,8 @@ Created by: **Nathan Wanjau.**
 1.  [Plugin Overview](#1-plugin-overview)
 2.  [Core Components](#2-core-components)
 3.  [**IMPORTANT: Initial Project Setup**](#3-important-initial-project-setup)
+    *   [Step 1: Create the VehicleSensor Trace Channel](#step-1-create-the-vehiclesensor-trace-channel)
+    *   [Step 2: Configure Collision Responses](#step-2-configure-collision-responses)
 4.  [Quick Setup Guide](#4-quick-setup-guide)
     *   [Step 1: Setting Up Your Vehicle Pawn](#step-1-setting-up-your-vehicle-pawn)
     *   [Step 2: Creating the Road Network](#step-2-creating-the-road-network)
@@ -61,9 +63,9 @@ The plugin is composed of several key C++ classes and content assets that work t
 
 ## 3. IMPORTANT: Initial Project Setup
 
-Before you begin, you must configure a dedicated Trace Channel for the AI's sensors. **The obstacle avoidance system will not work without this step.**
+Before you begin, you must configure your project's collision settings correctly. **The AI's obstacle avoidance system will not work properly without these steps.**
 
-### Create the VehicleSensor Trace Channel
+### Step 1: Create the VehicleSensor Trace Channel
 
 1.  Go to **Edit -> Project Settings...**
 2.  Under the **Engine** section on the left, click on **Collision**.
@@ -73,15 +75,23 @@ Before you begin, you must configure a dedicated Trace Channel for the AI's sens
     *   **Default Response:** `Block`
 5.  Click **Accept**.
 
-You will now see "VehicleSensor" in your list of Trace Channels. By default, the `ITSv2Component` is configured to use this channel (`ECC_GameTraceChannel12`). This allows the AI's sensors to detect all objects set to "Block" this channel without interfering with other gameplay traces like visibility or camera.
+### Step 2: Configure Collision Responses
 
-<!-- Placeholder for an image showing the trace channel setup -->
+For the AI sensors to work correctly, you must tell them what to **ignore**. If you skip this step, the AI may see invisible trigger boxes or the road itself as a wall and refuse to move.
+
+*   **Road Network Trigger Boxes:**
+    *   **Why:** The `AVehiclePathSpline` actors use trigger boxes for intersection logic. The AI should drive *through* these, not avoid them.
+    *   **How:** For your `AVehiclePathSpline` Blueprint (or each instance in the level), select the `ForwardLaneTrigger` and `BackwardLaneTrigger` components. In the Details panel, go to the Collision section, set **Collision Presets** to `Custom...`, and change the response for the **`VehicleSensor`** trace channel to **`Ignore`**.
+
+*   **Roads, Landscapes, and Ground Surfaces:**
+    *   **Why:** The AI's sensors point slightly downwards to work correctly on hills and slopes. If the ground itself blocks the `VehicleSensor` channel, the AI will constantly detect the road immediately in front of it as an obstacle and may stop or drive erratically.
+    *   **How:** Select your road meshes, landscape actors, and any other ground surfaces in your level. In their Collision settings, set the response for the **`VehicleSensor`** trace channel to **`Ignore`**.
 
 ---
 
 ## 4. Quick Setup Guide
 
-Follow these steps to get your first AI vehicle driving in minutes.
+After completing the Initial Project Setup above, you can now set up your AI vehicles.
 
 ### Step 1: Setting Up Your Vehicle Pawn
 
@@ -91,8 +101,6 @@ Follow these steps to get your first AI vehicle driving in minutes.
     *   In the Class Defaults for your vehicle Blueprint, search for the "AI" category.
     *   Set the **`AI Controller Class`** to **`ITSv2_AIController`**. This controller is included in the plugin's content folder.
 
-<!-- Placeholder for an image of the vehicle pawn setup -->
-
 ### Step 2: Creating the Road Network
 
 The AI needs `VehiclePathSpline` actors to know where to drive.
@@ -100,15 +108,9 @@ The AI needs `VehiclePathSpline` actors to know where to drive.
 1.  **Place Spline Actors:** From the "Place Actors" panel, search for `VehiclePathSpline` and drag them into your level to create roads. You can edit the spline points just like a standard engine spline.
 2.  **Configure Path Type:**
     *   Select a spline actor. In its Details panel, find the **`Path Type`** setting.
-    *   Set it to `Traffic Path` for a normal road. You can adjust the **`Lane Offset`** and mark it as **`bIsOneWay`** if needed.
-3.  **Connect the Splines:** For an AI to drive from one spline to the next, you must connect them.
-    *   Select the first spline. At the end of the spline, a trigger box is visualized.
-    *   Find the **`Forward Lane Next Paths`** array in the Details panel.
-    *   Add a new element to the array.
-    *   Use the eyedropper to pick the *next* `VehiclePathSpline` actor in the world.
-    *   The editor will draw a green debug curve showing the generated path through the intersection.
-
-> **Pro Tip:** The `AITSv2_Spawner` can do this for you automatically! See the next step.
+    *   Set it to `Traffic Path` for a normal road.
+3.  **Connect the Splines at Junctions:**
+    *   **CRUCIAL:** For the `ITSv2_Spawner` to automatically detect an intersection, the trigger boxes at the ends of your `VehiclePathSpline` actors **must physically overlap** in the world. Position the end point of one spline and the start point of another so their trigger volumes intersect.
 
 ### Step 3: Setting Up the AI Spawner
 
@@ -121,9 +123,9 @@ The spawner brings your world to life by populating it with AI vehicles.
     *   You can set a **`Spawn Probability`** for each class to control how frequently they appear.
 3.  **Automatic Network Setup:** The spawner is the easiest way to build your road network.
     *   Ensure **`bAuto Assign Next Paths`** and **`bAuto Assign Path Priorities`** are enabled.
-    *   When you press "Play", the spawner will automatically detect all `VehiclePathSpline` actors that are close to each other and treat them as intersections. It will create the path connections and determine which roads have priority (i.e., main roads vs. side roads).
+    *   When you press "Play", the spawner will automatically detect all `VehiclePathSpline` actors **whose end-point trigger boxes overlap** and treat them as intersections. It will create the path connections and determine which roads have priority (i.e., main roads vs. side roads).
     *   You can run this process in the editor by selecting the spawner and clicking the **`Find Intersections In Editor`** and **`Assign Next Paths In Editor`** buttons.
-4.  **Press Play!** AI vehicles should now spawn and begin driving along the spline network, respecting each other at intersections.
+4.  **Press Play!** AI vehicles should now spawn and begin driving along the spline network.
 
 ---
 
@@ -135,87 +137,37 @@ This is the main component containing all the settings that define an AI's behav
 
 #### Key Settings Categories
 
-*   **Follow**
-    *   `Drive Mode`: The primary behavior of the AI.
-        *   `Follow Target Actor`: The AI will use the road network to find the best path to the specified `Target Actor`. It will dynamically update its path if the target moves.
-        *   `Follow Spline`: The AI will follow the specified `Current Path` spline. This is used for traffic simulation spawned by the `ITSv2_Spawner`.
-    *   `Max Follow Speed Kmh`: The general maximum speed limit for the vehicle in kilometers per hour.
-
-*   **Vehicle Profile**
-    *   This section allows you to define the physical driving characteristics of the vehicle. You can choose a `Default Profile` (like `Slow`, `Standard`, `Fast`) for quick setup, or select `Custom` to use a `Vehicle Profile` Data Asset for maximum control. (See [Advanced Topics](#6-advanced-topics) for more info).
-
-*   **Control**
-    *   `bFullStop`: An important flag that can be set externally (e.g., by a `TrafficLight` actor) to force the vehicle to a complete stop.
-    *   `Steering/Throttle Gain`: Multipliers that control how aggressively the AI steers and accelerates. Higher values result in more responsive, but potentially less stable, driving.
-
-*   **Smarter AI | Overtaking (Traffic)**
-    *   `bAllowTrafficOvertaking`: If enabled, traffic vehicles will attempt to overtake slower vehicles on two-way roads.
-    *   `OvertakeOncomingClearance`: How far ahead the opposite lane must be clear before the AI will commit to an overtake.
-
-*   **Smarter AI | Racing**
-    *   These settings are active when `Drive Mode` is `Follow Spline` and the `VehiclePathSpline` `Path Type` is `Racing`.
-    *   `RacingLineAggressiveness`: Controls how tightly the AI tries to hit the apex of a corner (0 = stays in the middle, 1 = cuts to the inside edge).
-    *   `DraftDistance`: The distance behind another car at which the AI is considered to be "drafting" and receives a speed boost.
-
-*   **Reverse**
-    *   `bAllowReverse`: Determines if the AI is capable of reversing.
-    *   `ReverseAngleThresholdDeg`: If the angle to the next seek point is greater than this value, the AI will perform a three-point turn by reversing.
-
-*   **Smarter AI | Unstuck**
-    *   `TimeUntilStuck`: If the vehicle's speed is below `StuckSpeedThresholdCms` for this duration, it will trigger its "unstuck" logic (usually reversing).
-
-*   **Sensors**
-    *   `bUseSensors`: Master toggle for the obstacle avoidance system.
-    *   `SensorTraceChannel`: This is the collision channel the sensors use. It defaults to `ECC_GameTraceChannel12`, which corresponds to the `VehicleSensor` channel you created.
-    *   `NumSensorRays`, `SensorSideAngleDeg`, `SensorDistance`: These define the AI's "vision cone". More rays provide more detailed information but have a minor performance cost.
-    *   `Front/Rear Sensor Origin`: These FVectors define the local-space starting points for the sensor raycasts. You should position them at the corners of your vehicle for best results. Use the `UpdateSensorVisualization` button to see them in the editor.
-    *   `SensorBrakeDistance` / `SensorHardBrakeDistance`: The distances at which the AI will begin to apply the brakes or slam on the brakes, respectively.
-
-*   **Debug**
-    *   (See [Debugging Your AI](#debugging-your-ai) section below).
+*   **Follow**: Configures the AI's primary goal, such as following a target or a spline.
+*   **Vehicle Profile**: Defines the physical driving characteristics (engine, gears, etc.).
+*   **Control**: General driving behavior like steering aggression and stopping logic.
+*   **Smarter AI | Overtaking (Traffic)**: Enables and configures overtaking logic for regular traffic.
+*   **Smarter AI | Racing**: Specialized settings for competitive racing behavior.
+*   **Reverse**: Controls if and when the AI is allowed to reverse.
+*   **Smarter AI | Unstuck**: Logic for detecting and recovering from being stuck.
+*   **Sensors**: The heart of the obstacle avoidance system.
+    *   `SensorTraceChannel`: This should be set to the **`VehicleSensor`** channel you created.
+*   **Debug**: Toggles for visualizing AI behavior in real-time.
 
 ### Vehicle Path Spline Actor
 
 This actor is used to visually define the paths for your AI.
 
-*   **Path Type**
-    *   `Traffic Path`: Creates a standard road with one or two lanes. The AI will drive along offset splines generated from the central `GuideSpline`. Use this for all city/road networks.
-    *   `Racing Path`: Creates a single racing line with left and right boundary splines. The AI will use specialized racing logic to find the optimal line between these boundaries.
-    *   `Parking Spot`: Defines a parking spot. The AI can pull into this path and will remain "parked" for a random duration before attempting to exit and rejoin traffic.
-
-*   **Path Priority**
-    *   When the spawner auto-detects an intersection, it needs to know which roads have the right-of-way. Paths with `High` priority will be treated as main roads, and vehicles on `Normal` priority paths will yield to them.
-
-*   **Connections**
-    *   `ForwardLaneNextPaths` / `BackwardLaneNextPaths`: These arrays define the valid exits from the current spline. While you can set these manually, it is highly recommended to use the **`AITSv2_Spawner`** to automatically configure them.
+*   **Path Type**: Can be `Traffic Path`, `Racing Path`, or `Parking Spot`.
+*   **Path Priority**: Determines right-of-way at intersections (`Low`, `Normal`, `High`).
+*   **Connections**: Defines valid exits from this spline. Best configured automatically by the **`AITSv2_Spawner`** by overlapping trigger boxes.
 
 ### ITSv2 Spawner Actor
 
 The spawner is a powerful manager for your AI traffic population.
 
-*   **Vehicle Classes**
-    *   A list of vehicle Blueprints that the spawner is allowed to instantiate. You can set the probability for each to control the variety of traffic.
-*   **Spawn/Despawn Distances**
-    *   `MinSpawnDistance` / `MaxSpawnDistance`: The range from the player where new vehicles can be spawned.
-    *   `DespawnDistance`: If a vehicle gets this far away from the player, it will be destroyed to save performance.
-    *   > The spawner includes occlusion checks, so vehicles will not spawn directly in the player's line of sight.
-*   **Junctions**
-    *   `bAutoAssignNextPaths`: When enabled, the spawner analyzes the level on `BeginPlay` and automatically populates the `NextPaths` arrays on all `VehiclePathSpline` actors. **This is the recommended way to build your network.**
-    *   `bAutoAssignPathPriorities`: When enabled, the spawner will attempt to identify "main roads" (those that pass straight through an intersection) and automatically set their `PathPriority` to `High`.
-    *   `bDriveOnLeft`: A global setting that tells all AI how to behave. It affects which side of the road they drive on and right-of-way rules at intersections.
+*   **Junctions**:
+    *   `bAutoAssignNextPaths`: When enabled, analyzes the level on `BeginPlay` by detecting **overlapping trigger boxes** and automatically connects the road network.
+    *   `bAutoAssignPathPriorities`: When enabled, attempts to identify "main roads" and grant them `High` priority automatically.
+    *   `bDriveOnLeft`: Global setting for traffic direction rules.
 
 ### Traffic Light Actor
 
-A simple actor to control traffic flow.
-
-1.  **Placement:** Place the actor so its `TriggerVolume` covers the area where you want vehicles to stop for the light.
-2.  **Configuration:**
-    *   Set the **`PathToControl`** to the `VehiclePathSpline` that the light should affect.
-    *   Set the **`LaneToControl`** to either the `ForwardLane` or `BackwardLane` of that path.
-    *   Set the **`VehicleClassToControl`** to your base AI vehicle class.
-    *   Adjust the `Green/Yellow/Red Light Duration` values to control the timing.
-
-When a configured vehicle enters the trigger, the traffic light will take control by setting its `bFullStop` property. When the light turns green or the vehicle exits the trigger, the light will release control.
+A simple actor to control traffic flow by setting the `bFullStop` variable on vehicles that enter its trigger volume and match its configured path.
 
 ---
 
@@ -223,48 +175,24 @@ When a configured vehicle enters the trigger, the traffic light will take contro
 
 ### Creating Custom Vehicle Profiles
 
-For ultimate control over AI driving behavior, you can create a custom Vehicle Profile.
-
-1.  In the Content Browser, right-click and go to `Miscellaneous -> Data Asset`.
-2.  Select `ITSv2VehicleProfile` as the class.
-3.  Open the new Data Asset. You will find three main structs:
-    *   **`Drivetrain`**: Controls the engine's torque curve, max RPM, gear ratios, and shift points.
-    *   **`Aerodynamics`**: Sets the drag and downforce coefficients, which affect high-speed stability.
-    *   **`AIControl`**: Contains AI-specific driving parameters like `SteeringGain`, `ThrottleGain`, and `FollowingTime`, overriding the defaults in the `ITSv2Component`.
-4.  Once configured, select your AI vehicle, find its `ITSv2Component`, set the `Default Profile` to `Custom`, and assign your new Data Asset to the `Vehicle Profile` slot.
+For ultimate control over AI driving behavior, create a custom `ITSv2VehicleProfile` Data Asset. This allows you to define a vehicle's Drivetrain, Aerodynamics, and AI Control parameters, which can then be assigned in the `ITSv2Component`.
 
 ### How Intersections Work
 
-The AI uses a multi-step process to navigate intersections safely:
-1.  **Trigger:** The AI's pawn overlaps with the trigger box at the end of its current `VehiclePathSpline`.
-2.  **Path Selection:** It randomly chooses a valid exit from the spline's `NextPaths` array.
-3.  **Path Generation:** A smooth Bézier curve is generated from its current position to the entry point of the next spline.
-4.  **Safety Checks:** Before entering the intersection, it performs several checks:
-    *   **Physical Clearance:** Is the curved path physically blocked by another vehicle?
-    *   **Exit Clearance:** Is the exit of the intersection blocked by a stopped vehicle? (This prevents the AI from "blocking the box").
-    *   **Yielding:** It checks for other vehicles approaching the intersection. It will yield based on:
-        *   Another vehicle is already in the intersection.
-        *   The other vehicle is on a road with a higher `PathPriority`.
-        *   Right-of-way rules (e.g., yield to the right if priorities are equal).
-5.  **Proceed:** If all checks pass, it proceeds along the generated curve. If a check fails, it enters a "waiting" state and repeats the checks until the path is clear. To prevent deadlocks, a timer (`IntersectionWaitTimeUntilForce`) will eventually force the AI to proceed if it waits too long.
+1.  **Detection:** The `AITSv2_Spawner` identifies intersections by finding `VehiclePathSpline` actors whose **end-point trigger boxes physically overlap**.
+2.  **Trigger:** An AI vehicle enters the trigger box at the end of its current path.
+3.  **Safety Checks:** Before proceeding, the AI checks if the path is physically clear, if the intersection exit is blocked, and yields to other vehicles based on priority and right-of-way rules.
+4.  **Proceed:** If all checks pass, it drives through the intersection. A failsafe timer prevents permanent deadlocks.
 
 ### Debugging Your AI
 
-Troubleshooting AI can be difficult, so ITSv2 includes several visualization tools. Select an AI vehicle's `ITSv2Component` to access them.
+Troubleshooting AI is easier with the built-in visualization tools in the `ITSv2Component`.
 
-*   **`bDrawDebug`**: The master switch. When enabled, it draws:
-    *   **Sensor Rays:** Green for clear, red for a hit.
-    *   **Vehicle Corners:** Yellow lines showing the defined dimensions of the vehicle.
-    *   **Seek Point:** A green sphere showing where the AI is currently trying to drive.
-    *   **Avoidance Vector:** An orange line showing the path the AI is taking to avoid an obstacle.
-*   **`bVerboseDebug`**: When enabled along with `bDrawDebug`, it prints the AI's current state (e.g., "Driving", "Reversing", "Yielding") as text above the vehicle in the game world.
+*   **`bDrawDebug`**: The master switch. Enables real-time drawing of sensor rays, vehicle corners, the AI's current seek point, and its avoidance path.
+*   **`bVerboseDebug`**: When enabled, prints the AI's current high-level state (e.g., "Driving", "Reversing", "Yielding") as text above the vehicle in the game world.
 
 ### Behavior Tree Logic
 
 The included Behavior Tree (`BT_Vehicle`) orchestrates the AI's high-level states.
-*   **`BTS_UpdateAIState` (Service):** This is the most important node. It runs constantly and reads data from the `ITSv2Component` (like `IsStuck`, `DriveMode`, etc.) and writes it to the Blackboard. This keeps the tree's knowledge of the world up-to-date.
-*   **Branches:** The tree is divided into several main branches based on priority.
-    1.  **Stuck/Reverse Logic:** The highest priority is to handle being stuck. If the `IsStuck` key is true, it will execute the `BTT_ExecuteStuckReverse` task. It also handles planned reverses for tight turns.
-    2.  **Driving Logic:** If not stuck, it will execute the main driving logic.
-    3.  **Drive Task (`BTT_DriveToSeekPoint`):** This task runs continuously while the AI is driving. On each tick, it gets the latest `SeekPoint` from the `ITSv2Component` and calls the `ExecuteDrive` function, which calculates the final steering, throttle, and brake inputs.
-    4.  **Brake Task (`BTT_Brake`):** A simple task that is called if the AI has no valid goal, telling it to apply the brakes.
+*   **`BTS_UpdateAIState` (Service):** The core service that runs constantly, reading data from the `ITSv2Component` (like `IsStuck`, `DriveMode`) and writing it to the Blackboard to inform the tree's decisions.
+*   **Main Branches:** The tree prioritizes logic in this order: 1) Handling being stuck or needing to reverse, 2) Executing the main driving logic, 3) Braking if there is no valid goal.
