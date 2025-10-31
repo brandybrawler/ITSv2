@@ -12,11 +12,9 @@ Created by: **Nathan Wanjau.**
     *   [Step 1: Setting Up Your Vehicle Pawn](#step-1-setting-up-your-vehicle-pawn)
     *   [Step 2: Creating the Road Network](#step-2-creating-the-road-network)
     *   [Step 3: Setting Up the AI Spawner](#step-3-setting-up-the-ai-spawner)
-5.  [Component Deep Dive](#5-component-deep-dive)
-    *   [ITSv2 Component](#itsv2-component)
-    *   [Vehicle Path Spline Actor](#vehicle-path-spline-actor)
+5.  [Detailed Settings Reference](#5-detailed-settings-reference)
     *   [ITSv2 Spawner Actor](#itsv2-spawner-actor)
-    *   [Traffic Light Actor](#traffic-light-actor)
+    *   [ITSv2 Component](#itsv2-component)
 6.  [Advanced Topics](#6-advanced-topics)
     *   [Creating Custom Vehicle Profiles](#creating-custom-vehicle-profiles)
     *   [How Intersections Work](#how-intersections-work)
@@ -129,48 +127,146 @@ The spawner brings your world to life by populating it with AI vehicles.
 
 ---
 
-## 5. Component Deep Dive
-
-### ITSv2 Component
-
-This is the main component containing all the settings that define an AI's behavior.
-
-#### Key Settings Categories
-
-*   **Follow**: Configures the AI's primary goal, such as following a target or a spline.
-*   **Vehicle Profile**: Defines the physical driving characteristics (engine, gears, etc.).
-*   **Control**: General driving behavior like steering aggression and stopping logic.
-*   **Smarter AI | Overtaking (Traffic)**: Enables and configures overtaking logic for regular traffic.
-*   **Smarter AI | Racing**: Specialized settings for competitive racing behavior.
-*   **Reverse**: Controls if and when the AI is allowed to reverse.
-*   **Smarter AI | Unstuck**: Logic for detecting and recovering from being stuck.
-*   **Sensors**: The heart of the obstacle avoidance system.
-    *   `SensorTraceChannel`: This should be set to the **`VehicleSensor`** channel you created.
-*   **Debug**: Toggles for visualizing AI behavior in real-time.
-
-### Vehicle Path Spline Actor
-
-This actor is used to visually define the paths for your AI.
-
-*   **Path Type**: Can be `Traffic Path`, `Racing Path`, or `Parking Spot`.
-*   **Path Priority**: Determines right-of-way at intersections (`Low`, `Normal`, `High`).
-*   **Connections**: Defines valid exits from this spline. Best configured automatically by the **`AITSv2_Spawner`** by overlapping trigger boxes.
+## 5. Detailed Settings Reference
 
 ### ITSv2 Spawner Actor
 
-The spawner is a powerful manager for your AI traffic population.
+This actor manages the AI population in your level and performs the crucial task of building the road network for navigation.
 
-*   **Junctions**:
-    *   `bAutoAssignNextPaths`: When enabled, analyzes the level on `BeginPlay` by detecting **overlapping trigger boxes** and automatically connects the road network.
-    *   `bAutoAssignPathPriorities`: When enabled, attempts to identify "main roads" and grant them `High` priority automatically.
-    *   `bDriveOnLeft`: Global setting for traffic direction rules.
+#### Spawner Settings
+*   `Vehicle Classes`: This is where you define *what* the spawner can create. It's an array where you can add multiple types of vehicles. For each entry, you specify the vehicle's Blueprint class and its spawn probability (`Low`, `Medium`, `High`, `VeryHigh`).
+*   `Max Spawned Vehicles`: The maximum number of AI vehicles that can exist in the world at any one time. This is a key performance setting.
+*   `Min Spline Length For Spawning`: The spawner will ignore any `VehiclePathSpline` shorter than this value (in cm) to prevent spawning on small, unusable paths.
+*   `Min Spawn Distance`: The minimum distance (in cm) from the player that an AI vehicle can be spawned. This prevents vehicles from "popping in" right in front of the camera.
+*   `Max Spawn Distance`: The maximum distance (in cm) from the player where a vehicle can be spawned. Spawning happens in a ring between the min and max distances.
+*   `Despawn Distance`: If an AI vehicle gets further than this distance (in cm) from the player, it will be destroyed to save resources. This should always be greater than `Max Spawn Distance`.
+*   `Spawn Wait Time`: The delay in seconds between each spawn attempt.
+*   `bAllow Spawning On Parking Spots`: If `true`, vehicles can be spawned directly onto splines that are marked with the `Parking` path type.
+*   `Max Spawn Distance From Spline Start`: To prevent vehicles from spawning in the middle of a road, this value (in cm) limits how far along a spline a vehicle can be created.
 
-### Traffic Light Actor
+#### Junctions
+*   `bAuto Assign Next Paths`: **(Crucial)** When enabled, the spawner will automatically detect intersections on `BeginPlay` by finding `VehiclePathSpline` actors whose end trigger boxes overlap. It then automatically populates the `ForwardLaneNextPaths` and `BackwardLaneNextPaths` arrays for each spline, building the road network graph.
+*   `bAuto Assign Path Priorities`: **(Recommended)** When enabled, the spawner analyzes the connections at each intersection and attempts to identify which paths form a "straight" road. It will automatically set the `PathPriority` of these splines to `High`, making them main roads.
+*   `bDrive On Left`: A global setting that tells all AI vehicles whether to follow left-hand or right-hand traffic rules, primarily affecting intersection turns and overtaking logic.
 
-A simple actor to control traffic flow by setting the `bFullStop` variable on vehicles that enter its trigger volume and match its configured path.
+#### AI Settings
+These are default values that will be applied to the `ITSv2Component` of every vehicle created by this spawner.
+*   `Sensor Distance`: The default maximum range (in cm) of the vehicle's obstacle avoidance sensors.
+*   `Max Follow Speed Kmh`: The default speed limit (in km/h) for spawned vehicles. Note that a vehicle's final top speed is still limited by its physics profile.
+
+#### Debug
+*   `bDraw Debug Spheres`: If `true`, the spawner will draw colored spheres at potential spawn locations, indicating why a spawn succeeded or failed (e.g., too close, visible to player, blocked by another car).
+*   `bDraw Intersection Debug Spheres`: If `true`, the spawner will draw persistent cyan boxes around every intersection it automatically detects, helping you visualize the junction areas.
+*   `Find Intersections In Editor` (Button): Runs the intersection detection logic in the editor, drawing the debug boxes so you can verify your setup without needing to play the game.
+*   `Assign Next Paths In Editor` (Button): Runs the full network connection and priority assignment logic in the editor. This is useful for pre-calculating the network.
 
 ---
+### ITSv2 Component
 
+This is the core component that gives your vehicle its AI brain. All driving behaviors, from high-level decision-making to low-level control inputs, are configured here.
+
+#### Follow
+
+This category controls the AI's primary goal and how it navigates the world.
+
+*   `Drive Mode`: The most important setting, which determines the AI's fundamental behavior.
+    *   `Follow Target Actor`: The AI will use the road network to dynamically calculate the best route to the `Target Actor`. Ideal for "mission" AI, taxis, or police cars.
+    *   `Follow Spline`: The AI will follow a specific `VehiclePathSpline` assigned to its `Current Path` variable. Used by the spawner to create ambient traffic.
+*   `Target Actor`: (In `Follow Target` mode) The actor the AI will attempt to drive to.
+*   `Follow Traffic Rules When Following Target`: (In `Follow Target` mode) If `true`, the AI behaves like normal traffic. If `false`, it acts as a high-priority vehicle (like an ambulance), ignoring yielding rules.
+*   `High Priority Speed Multiplier`: (In `Follow Target` mode) A multiplier applied to the AI's `Max Follow Speed Kmh` when it is in high-priority mode.
+*   `Current Path`: (In `Follow Spline` mode) A reference to the `VehiclePathSpline` actor the AI should currently be following.
+*   `Straight Lookahead Distance`: (In `Follow Spline` mode) How far ahead (in cm) on the spline the AI "looks" to calculate its target point on straight sections. Larger values result in smoother driving.
+*   `Corner Lookahead Distance`: (In `Follow Spline` mode) A shorter lookahead distance (in cm) used for sharp turns to prevent cutting corners too widely.
+*   `Lane To Follow`: (In `Follow Spline` mode) Determines which side of the `VehiclePathSpline` the AI will follow (`Forward` or `Backward` lane).
+*   `Acceptance Radius`: The distance (in cm) from the final destination at which the AI considers its goal "reached".
+*   `Max Follow Speed Kmh`: The general speed limit for this AI in kilometers per hour.
+
+#### Vehicle Profile
+
+Defines the physical performance and driving feel of the vehicle.
+
+*   `Default Profile`: Choose a pre-configured profile (`Slow`, `Standard`, `Fast`, `Hyper`) for quick setup. Select `Custom` to use your own Data Asset.
+*   `Vehicle Profile`: (When `Custom` is selected) Assign a `UITSv2VehicleProfile` Data Asset here to apply your custom engine, transmission, and AI control settings.
+*   `Apply Vehicle Profile Settings` (Button): Click this in the editor to immediately apply the selected profile's settings to the vehicle's movement component.
+
+#### Control
+
+These settings tweak the low-level inputs and state-based behaviors of the AI.
+
+*   `bFull Stop`: A master override. If `true`, the AI will immediately brake to a halt and hold its position. Used by the `TrafficLight` actor.
+*   `Min/Max Post Queue Move Delay`: Creates natural, less robotic traffic flow by making the AI wait for a random duration (in seconds) between these values before moving after a car in front of it moves.
+*   `Intersection Speed Multiplier`: A speed multiplier (0.0 - 1.0) applied when crossing an intersection to make the vehicle more cautious.
+*   `Max Intersection Yield Time`: The maximum time (in seconds) the AI will wait for another car at an intersection before re-evaluating if the path is clear.
+*   `Intersection Wait Time Until Force`: To prevent gridlock, if an AI waits at an intersection for this duration, it will ignore yielding rules and force its way through.
+*   `Intersection Deadlock Wait Time`: How long a vehicle waits in a gridlock *inside* an intersection before attempting to reverse to clear the way.
+*   `Post Blockage Wait Duration`: How long a high-priority vehicle will wait after a car blocking it starts to move away.
+*   `Steering Gain`: Multiplier for steering input. Higher values make steering more responsive.
+*   `Throttle Gain`: Multiplier for throttle input. Higher values make the AI accelerate more aggressively.
+*   `Brake Distance`: The distance from a target stop point where the AI will begin applying brakes.
+*   `Hard Brake Angle Deg`: If the angle to the target point is greater than this, the AI will slam on the brakes to avoid overshooting.
+*   `Overspeed Brake Intensity`: How strongly the AI brakes (0.0 - 1.0) when it is going faster than its current speed limit.
+*   `Prevent Illegal Overtaking`: If `true`, the AI will avoid steering into oncoming traffic unless performing a deliberate, safe overtake.
+*   `Following Time`: The minimum time gap (in seconds) the AI will try to maintain from the vehicle in front of it, determining its stopping distance in traffic.
+
+#### Smarter AI | Overtaking
+(Active only in `Follow Spline` mode)
+
+*   `bAllow Traffic Overtaking`: If `true`, AI traffic can decide to overtake slower vehicles on two-way roads.
+*   `Overtake Speed Advantage`: The minimum speed difference (in cm/s) required before an overtake is considered.
+*   `Overtake Speed Boost`: A speed multiplier applied during the overtake maneuver.
+*   `Overtake Oncoming Clearance`: How far ahead (in cm) the oncoming lane must be free of other vehicles for the AI to start overtaking.
+*   `Overtake Pull In Distance`: How far in front (in cm) of the passed vehicle the AI must be before it starts merging back into its lane.
+*   `Min Path Length For Overtake`: The AI will not attempt to overtake if the remaining distance on its current spline is less than this value.
+
+#### Smarter AI | Racing
+(Active in `Follow Spline` mode on a `Racing` path type)
+
+*   `Racing Line Aggressiveness`: How much the AI prioritizes the inside line of a corner (0 = center, 1 = fully cuts to the apex).
+*   `Racing Exit Unwind Distance`: How far past a corner's apex the AI continues to steer towards the outside of the track.
+*   `Racing Apex Lookahead`, `Racing Entry Setup Distance`, `Racing Straight Setup Lookahead`: Various lookahead distances (in cm) used by the racing logic to plan its path through upcoming corners.
+*   `Track Half Width` & `Lateral Safety Margin`: Defines the drivable surface of the racetrack for the AI.
+*   `Draft Distance` & `Draft Speed Bonus`: Defines the range and effect of slipstreaming behind another car.
+*   `Overtake Lateral Offset`: How far to the side (in cm) the AI will move when attempting a racing overtake.
+*   `Lane Change Speed`: Smoothing time for lateral movements. Lower is faster/snappier.
+
+#### Reverse
+
+*   `bAllow Reverse`: Master toggle for whether the AI can reverse.
+*   `Reverse Angle Threshold Deg` / `Reverse Distance Threshold`: If the angle to the target is greater than the threshold AND the distance is less than this threshold, the AI will perform a planned reverse (a three-point turn).
+*   `Reverse Speed Limit Kmh`: The maximum speed when reversing.
+*   `Reverse Throttle Scale`: A multiplier (0-1) to reduce throttle input when reversing.
+
+#### Sensors
+
+This crucial category defines the AI's perception of the world.
+*   `bUse Sensors`: Master toggle for the entire sensor-based obstacle avoidance system.
+*   `Traffic Queue Stopping Distance`: The desired gap (in cm) the AI will leave when stopping behind another vehicle in traffic.
+*   `AI Vehicle Class`: The base Blueprint class for your AI vehicles. The AI uses this to identify other traffic for behaviors like queuing.
+*   `Sensor Trace Channel`: The collision channel to use for sensor traces. **This must be set to the `VehicleSensor` channel you created in the project settings.**
+*   `Num Sensor Rays`: The number of line traces to cast in the AI's vision cone. More rays give better obstacle resolution but cost more performance.
+*   `Sensor Side Angle Deg`: The total angle of the sensor arc. 85 degrees means the sensors will fan out in a 170-degree arc in front of the vehicle.
+*   `Sensor Distance`: The maximum length (in cm) of the sensor rays.
+*   `Steering Avoidance Start Distance`: The distance at which the AI will begin to apply avoidance steering.
+*   `Sensor Sweep Radius`: The thickness of the sensor traces. This should be large enough to prevent the AI from trying to squeeze through tiny gaps.
+*   `Front/Rear Sensor Origin Left/Right`: The local-space starting positions for the sensor arrays. Use the gizmos in the viewport to position these at the corners of your vehicle.
+*   `Sensor Brake Distance` / `Sensor Hard Brake Distance`: The distance from a detected obstacle at which the AI will begin to apply normal or hard braking.
+*   `bUse Side Sensors`: Enables extra rays cast directly to the sides of the vehicle to prevent clipping walls or other cars during tight maneuvers.
+
+#### Vehicle Dimensions
+
+These settings help the AI understand its own physical size for maneuvering.
+
+*   `Front/Rear Left/Right Corner`: The local-space positions of the four corners of the vehicle's chassis. Use the gizmos to position these correctly.
+*   `Path Safety Margin`: An extra buffer (in cm) added to the vehicle's width when checking if a gap is wide enough to pass through.
+
+#### Debug
+
+*   `bDraw Debug`: The master toggle for all real-time debug visualizations. This is incredibly useful for understanding the AI's behavior. It will draw sensor rays, the current seek point, corner locations, and more.
+*   `bVerbose Debug`: If `true`, prints the AI's current state (e.g., "Driving", "Reversing", "Yielding") as text above the vehicle in-game.
+*   `bDraw State Debug`: Toggles the on-screen state text (`bVerboseDebug` must also be enabled).
+
+---
 ## 6. Advanced Topics
 
 ### Creating Custom Vehicle Profiles
