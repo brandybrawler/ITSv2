@@ -14,6 +14,7 @@ Created by: **Nathan Wanjau.**
     *   [Step 3: Setting Up the AI Spawner](#step-3-setting-up-the-ai-spawner)
 5.  [Detailed Settings Reference](#5-detailed-settings-reference)
     *   [ITSv2 Spawner Actor](#itsv2-spawner-actor)
+    *   [Vehicle Path Spline Actor](#vehicle-path-spline-actor)
     *   [ITSv2 Component](#itsv2-component)
 6.  [Advanced Topics](#6-advanced-topics)
     *   [Creating Custom Vehicle Profiles](#creating-custom-vehicle-profiles)
@@ -159,6 +160,37 @@ These are default values that will be applied to the `ITSv2Component` of every v
 *   `bDraw Intersection Debug Spheres`: If `true`, the spawner will draw persistent cyan boxes around every intersection it automatically detects, helping you visualize the junction areas.
 *   `Find Intersections In Editor` (Button): Runs the intersection detection logic in the editor, drawing the debug boxes so you can verify your setup without needing to play the game.
 *   `Assign Next Paths In Editor` (Button): Runs the full network connection and priority assignment logic in the editor. This is useful for pre-calculating the network.
+
+---
+### Vehicle Path Spline Actor
+
+This actor is the fundamental building block of your road network. You place and shape these in your level to define where the AI can drive.
+
+#### Path | Setup
+*   `Path Type`: Defines the purpose of this spline.
+    *   `Traffic Path`: A standard road. The actor will automatically generate a `ForwardLaneSpline` and `BackwardLaneSpline` based on the central `GuideSpline`.
+    *   `Racing Path`: A path for racing AI. It generates `LeftBoundarySpline` and `RightBoundarySpline` to define the track limits.
+    *   `Parking Spot`: A path for a parking maneuver. The AI will follow the `GuideSpline` directly to park.
+*   `Parking Type`: (If `Path Type` is `Parking`) Defines how the AI should exit the spot.
+    *   `Forward Exit`: The AI will drive forward to exit.
+    *   `Reverse Exit`: The AI will perform a guided reverse maneuver to exit.
+*   `Min/Max Parking Duration`: (If `Path Type` is `Parking`) The random time range (in seconds) that an AI will wait in a parking spot before attempting to leave.
+*   `Path Priority`: (If `Path Type` is `Traffic`) Determines right-of-way at intersections. Vehicles on a `High` priority path will be given precedence over vehicles on `Normal` or `Low` priority paths.
+*   `bIs One Way`: (If `Path Type` is `Traffic`) If `true`, traffic will only flow along the `ForwardLaneSpline`. The `BackwardLaneSpline` will not be generated, and the system will not create connections from it.
+*   `Lane Offset`: (If `Path Type` is `Traffic`) The distance (in cm) from the central `GuideSpline` to the generated forward and backward lanes.
+*   `Trigger Box Extent`: The size of the trigger volumes at the start and end of the spline. These triggers are crucial for intersection detection, so they must be large enough to overlap with the triggers of connecting splines.
+
+#### Path | Racing
+*   `Racing Path Left/Right Offset`: (If `Path Type` is `Racing`) The distance (in cm) from the central `GuideSpline` to the generated left and right track boundaries.
+*   `Close Spline Loop` (Button): A utility button for racing paths. It connects the last point of the `GuideSpline` to the first point, creating a seamless loop for a racetrack.
+
+#### Path | Connections
+This is where you define how splines connect to each other. **It is highly recommended to let the `ITSv2_Spawner` manage these automatically by setting `bAuto Assign Next Paths` to true.**
+*   `Forward Lane Next Paths`: An array defining all the possible splines an AI can drive to after reaching the end of the `ForwardLaneSpline`.
+*   `Backward Lane Next Paths`: An array defining all the possible splines an AI can drive to after reaching the end of the `BackwardLaneSpline`.
+*   `Clear Next Path Connections` (Button): Manually clears both `Next Paths` arrays.
+*   `Intersection Curve Tangent Scale`: A visual-only setting that controls the "roundness" of the green debug curves that are drawn in the editor to show intersection connections.
+*   `Junction Point Debug Sphere Radius`: Controls the size of the orange debug sphere drawn on the visualized intersection curves.
 
 ---
 ### ITSv2 Component
